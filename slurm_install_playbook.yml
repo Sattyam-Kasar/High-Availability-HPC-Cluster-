@@ -1,0 +1,393 @@
+---
+- name: Slurm Installation - Common Steps (Source Build)
+  hosts: all
+  become: true
+  vars:
+    slurm_version: "21.08.8-2"
+    source_dir: "/root/slurm-{{ slurm_version }}"
+    slurm_install_dir: "/usr/local"
+    slurm_url: "https://download.schedmd.com/slurm/slurm-{{ slurm_version }}.tar.bz2"
+    
+  tasks:
+    - name: Ensure SSH is allowed (Prevents Network Lockout)
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+      ignore_errors: yes
+    
+    - name: Ensure SSH is allowed (Safety First)
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+      ignore_errors: yes
+    
+    - name: Now Gather Facts
+      setup:
+
+    - name: Install Required Dependencies 
+      apt:
+        name:
+          - build-essential
+          - munge
+          - libmunge-dev
+          - libmunge2
+          - libmysqlclient-dev
+          - libssl-dev
+          - libpam0g-dev
+          - libnuma-dev
+          - perl
+          - mailutils
+          - wget
+        update_cache: yes
+        state: present
+
+    - name: Download SLURM 
+      get_url:
+        url: "{{ slurm_url }}"
+        dest: "/root/slurm-{{ slurm_version }}.tar.bz2"
+        mode: '0644'
+
+    - name: Extract SLURM
+      unarchive:
+        src: "/root/slurm-{{ slurm_version }}.tar.bz2"
+        dest: /root/
+        remote_src: yes
+
+    - name: Configure SLURM 
+      command: ./configure --prefix={{ slurm_install_dir }} --sysconfdir=/etc/slurm --with-munge
+      args:
+        chdir: "{{ source_dir }}"
+        creates: "{{ source_dir }}/config.status"
+
+    - name: Compile SLURM (make)
+      command: make -j {{ ansible_processor_vcpus }}
+      args:
+        chdir: "{{ source_dir }}"
+        creates: "{{ source_dir }}/src/slurmd/slurmd"
+
+    - name: Install SLURM (make install)
+      command: make install
+      args:
+        chdir: "{{ source_dir }}"
+        creates: "{{ slurm_install_dir }}/bin/srun"
+
+    - name: Update Library Cache (Fixes Plugin Loading)
+      shell: |
+        echo "/usr/local/lib" > /etc/ld.so.conf.d/slurm.conf
+        echo "/usr/local/lib/slurm" >> /etc/ld.so.conf.d/slurm.conf
+        ldconfig
+
+    - name: Create Required Directories 
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /etc/slurm
+        - /etc/slurm-llnl
+        - /var/log/slurm
+
+    - name: Update /etc/hosts with Cluster Configuration
+      blockinfile:
+        path: /etc/hosts
+        block: |
+          192.168.100.2 MasterNode
+          192.168.100.3 WorkerNode1
+          192.168.100.4 WorkerNode2
+          192.168.100.5 PassiveMaster
+          192.168.100.6 PassiveWorker
+        marker: "# {mark} ANSIBLE MANAGED CLUSTER BLOCK"
+
+- name: Controller Node Specific Steps
+  hosts: slurm_controller
+  become: true
+  vars:
+    slurm_version: "21.08.8-2"
+    source_dir: "/root/slurm-{{ slurm_version }}"
+    slurm_install_dir: "/usr/local"
+    
+  tasks:
+    - name: Create and Configure Munge Key 
+      command: /usr/sbin/create-munge-key -f
+      args:
+        creates: /etc/munge/munge.key
+
+    - name: Set Munge Permissions 
+      file:
+        path: /etc/munge/munge.key
+        owner: munge
+        group: munge
+        mode: '0400'
+
+    - name: Install and Configure MariaDB 
+      apt:
+        name: mariadb-server
+        state: present
+
+    - name: Install Python MySQL dependencies (Fixes Ansible Error)
+      apt:
+        name:
+          - python3-pymysql
+        state: present
+
+    - name: Start and Enable MySQL 
+      service:
+        name: mysql
+        state: started
+        enabled: yes
+
+    - name: Setup Database and Users via SQL (Bypass Ansible Auth Issues)
+      shell: |
+        mysql -u root -e "CREATE DATABASE IF NOT EXISTS slurm_acct_db;"
+        mysql -u root -e "CREATE USER IF NOT EXISTS 'root'@'localhost' IDENTIFIED BY 'root';"
+        mysql -u root -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;"
+        mysql -u root -e "FLUSH PRIVILEGES;"
+      no_log: false
+
+    - name: Configure SLURM
+      copy:
+        src: "{{ source_dir }}/etc/slurm.conf.example"
+        dest: "{{ source_dir }}/etc/slurm.conf"
+        remote_src: yes
+
+    - name: Deploy Custom slurm.conf
+      template:
+        src: templates/slurm.conf.j2
+        dest: "{{ source_dir }}/etc/slurm.conf"
+        backup: yes
+
+    - name: Configure SLURM Database file 
+      template:
+        src: templates/slurmdbd.conf.j2
+        dest: "{{ source_dir }}/etc/slurmdbd.conf"
+        mode: '0600'
+
+    - name: Copy SLURM Config to /etc/slurm 
+      copy:
+        src: "{{ source_dir }}/etc/{{ item }}"
+        dest: "/etc/slurm/{{ item }}"
+        remote_src: yes
+      loop:
+        - slurm.conf
+        - slurmdbd.conf
+
+    - name: Copy SLURM Config to /etc/slurm-llnl 
+      copy:
+        src: "{{ source_dir }}/etc/{{ item }}"
+        dest: "/etc/slurm-llnl/{{ item }}"
+        remote_src: yes
+      loop:
+        - slurm.conf
+
+    - name: Setup Service Files 
+      copy:
+        src: "{{ source_dir }}/etc/{{ item }}"
+        dest: /etc/systemd/system/
+        remote_src: yes
+      loop:
+        - slurmctld.service
+        - slurmd.service
+        - slurmdbd.service
+
+    - name: Create State Save Location
+      file:
+        path: /var/spool/slurmctld
+        state: directory
+
+    - name: Configure Environment (Add to $HOME/.bashrc)
+      blockinfile:
+        path: "{{ ansible_env.HOME }}/.bashrc"
+        block: |
+          export PATH="{{ slurm_install_dir }}/bin/:{{ slurm_install_dir }}/sbin/:$PATH"
+          export LD_LIBRARY_PATH="{{ slurm_install_dir }}/lib/:$LD_LIBRARY_PATH"
+
+    - name: Start and Enable Services 
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+      loop:
+        - munge
+        - slurmdbd
+        - slurmctld
+        - slurmd 
+
+    - name: Create Local Config Storage
+      delegate_to: localhost
+      become: false
+      file:
+        path: "{{ playbook_dir }}/cluster_configs"
+        state: directory
+
+    - name: Fetch Munge Key
+      fetch:
+        src: /etc/munge/munge.key
+        dest: "{{ playbook_dir }}/cluster_configs/munge.key"
+        flat: yes
+
+    - name: Fetch SLURM Configs
+      fetch:
+        src: "/etc/slurm/slurm.conf"
+        dest: "{{ playbook_dir }}/cluster_configs/slurm.conf"
+        flat: yes
+
+- name: Compute Node Specific Steps
+  hosts: slurm_compute
+  become: true
+  vars:
+    slurm_version: "21.08.8-2"
+    source_dir: "/root/slurm-{{ slurm_version }}"
+
+  tasks:
+    - name: Copy Munge Key from Local storage
+      copy:
+        src: "{{ playbook_dir }}/cluster_configs/munge.key"
+        dest: /etc/munge/munge.key
+        owner: munge
+        group: munge
+        mode: '0400'
+
+    - name: Ensure ALL Munge Directories Exist with Strict Permissions
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: munge
+        group: munge
+        mode: '0700'
+      loop:
+        - /etc/munge
+        - /var/lib/munge  # Critical for internal state
+        - /var/log/munge
+        - /run/munge      # Critical for the service socket
+    
+    - name: Enable and Start Munge 
+      systemd:
+        name: munge
+        state: restarted
+        enabled: yes
+
+    - name: Copy SLURM Configuration to source
+      copy:
+        src: "{{ playbook_dir }}/cluster_configs/slurm.conf"
+        dest: "{{ source_dir }}/etc/slurm.conf"
+
+    - name: Copy SLURM Configuration to /etc
+      copy:
+        src: "{{ playbook_dir }}/cluster_configs/slurm.conf"
+        dest: "/etc/slurm/slurm.conf"
+
+    - name: Copy SLURM Configuration to llnl
+      copy:
+        src: "{{ playbook_dir }}/cluster_configs/slurm.conf"
+        dest: "/etc/slurm-llnl/slurm.conf"
+
+    - name: Create State Save Location
+      file:
+        path: /var/spool/slurmd
+        state: directory
+
+    - name: Setup Service Files 
+      copy:
+        src: "{{ source_dir }}/etc/slurmd.service"
+        dest: /etc/systemd/system/slurmd.service
+        remote_src: yes
+
+    - name: Start and Enable Services 
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+      loop:
+        - munge
+        - slurmd
+
+- name: Setup SSH Trust (Controller -> Computes)
+  hosts: slurm_controller
+  become: true
+  tasks:
+    - name: Generate SSH Key (No Passphrase)
+      shell: ssh-keygen -t rsa -f /root/.ssh/id_rsa -N "" -q
+      args:
+        creates: /root/.ssh/id_rsa
+
+    - name: Fetch Controller Public Key to Login Node
+      fetch:
+        src: /root/.ssh/id_rsa.pub
+        dest: "{{ playbook_dir }}/cluster_configs/controller_id_rsa.pub"
+        flat: yes
+
+- name: Distribute SSH Key to Compute Nodes
+  hosts: slurm_compute
+  become: true
+  tasks:
+    - name: Add Controller Public Key to Authorized Keys
+      authorized_key:
+        user: root
+        state: present
+        key: "{{ lookup('file', playbook_dir + '/cluster_configs/controller_id_rsa.pub') }}"
+
+
+- name: Configure Login Node as Slurm Client
+  hosts: slurm_login
+  become: true
+  tasks:
+    - name: Install Munge and Build Dependencies
+      apt:
+        name: [munge, libmunge-dev, build-essential]
+        state: present
+        update_cache: yes
+
+    - name: Ensure munge user and group exist
+      group: { name: munge, state: present, system: yes }
+    - name: Create munge user
+      user: { name: munge, group: munge, state: present, system: yes, shell: /usr/sbin/nologin }
+
+    - name: Create Munge Directory Structure
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: munge
+        group: munge
+        mode: '0700'
+      loop:
+        - /etc/munge
+        - /var/lib/munge
+        - /var/log/munge
+        - /run/munge
+
+    - name: Copy Munge Key (Synchronize with Cluster)
+      copy:
+        src: "{{ playbook_dir }}/cluster_configs/munge.key"
+        dest: /etc/munge/munge.key
+        owner: munge
+        group: munge
+        mode: '0400'
+
+    - name: Start Munge Service
+      systemd:
+        name: munge
+        state: restarted
+        enabled: yes
+
+    - name: Copy Slurm Configuration (Point to Master)
+      copy:
+        src: "{{ playbook_dir }}/cluster_configs/slurm.conf"
+        dest: /etc/slurm/slurm.conf
+        mode: '0644'
+
+    - name: Create Slurm Directory for Logs/State
+      file:
+        path: /var/spool/slurmd
+        state: directory
+        mode: '0755'
+
+    - name: Configure Login Environment
+      blockinfile:
+        path: "{{ ansible_env.HOME }}/.bashrc"
+        block: |
+          export PATH="/usr/local/bin:/usr/local/sbin:$PATH"
+          export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
