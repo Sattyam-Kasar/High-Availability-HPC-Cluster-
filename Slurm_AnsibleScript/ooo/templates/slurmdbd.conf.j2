@@ -1,0 +1,10 @@
+AuthType=auth/munge
+DbdAddr=controller
+DbdHost=controller
+SlurmUser=root
+DebugLevel=verbose
+LogFile=/var/log/slurm/slurmdbd.log
+PidFile=/var/run/slurmdbd.pid
+StorageType=accounting_storage/mysql
+StoragePass={{ slurm_db_pass }}
+StorageUser={{ slurm_db_user }}

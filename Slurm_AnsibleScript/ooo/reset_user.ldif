@@ -1,0 +1,4 @@
+dn: uid=clusteruser,ou=people,dc=acts,dc=local
+changetype: modify
+replace: userPassword
+userPassword: 1234

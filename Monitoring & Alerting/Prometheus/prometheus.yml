@@ -1,0 +1,63 @@
+# Sample config for Prometheus.
+
+global:
+  scrape_interval:     15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute.
+  # scrape_timeout is set to the global default (10s).
+
+  # Attach these labels to any time series or alerts when communicating with
+  # external systems (federation, remote storage, Alertmanager).
+  external_labels:
+      monitor: 'example'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets: ['localhost:9093']
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+  - "/etc/prometheus/alert.rules.yml"  # Make sure this file exists in the same folder as prometheus.yml
+# A scrape configuration containing exactly one endpoint to scrape:
+# Here it's Prometheus itself.
+scrape_configs:
+  # Scrape Slurm Metrics
+  - job_name: 'slurm-exporter'
+    static_configs:
+      - targets: ['localhost:9255']
+        labels:
+          cluster: 'MyHPC'
+
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape Node Metrics (CPU, RAM, Disk)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+  
+
+
+
+
+
+
+  # 2. This monitors ALL your HPC Nodes
+  - job_name: 'hpc_cluster_nodes'
+    static_configs:
+      - targets: ['192.168.100.1:9100']
+        labels: { alias: 'Headnode' }
+      - targets: ['192.168.100.2:9100']
+        labels: { alias: 'MasterNode' }
+      - targets: ['192.168.100.3:9100']
+        labels: { alias: 'WorkerNode1' }
+      - targets: ['192.168.100.4:9100']
+        labels: { alias: 'WorkerNode2' }
+      - targets: ['192.168.100.5:9100']
+        labels: { alias: 'PassiveMaster' }
+      - targets: ['192.168.100.6:9100']
+        labels: { alias: 'PassiveWorker' }

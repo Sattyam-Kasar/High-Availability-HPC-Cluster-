@@ -1,0 +1,17 @@
+$TTL    604800
+@       IN      SOA     Headnode.HPCCluster.com. admin.HPCCluster.com. (
+                              7         ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+;
+@       IN      NS      Headnode.HPCCluster.com.
+
+1       IN      PTR     Headnode.HPCCluster.com.
+2       IN      PTR     MasterNode.HPCCluster.com.
+3       IN      PTR     WorkerNode1.HPCCluster.com.
+4       IN      PTR     WorkerNode2.HPCCluster.com.
+5       IN      PTR     PassiveMaster.HPCCluster.com.
+6       IN      PTR     PassiveWorker.HPCCluster.com.
+10      IN      PTR     SlurmVIP.HPCCluster.com.

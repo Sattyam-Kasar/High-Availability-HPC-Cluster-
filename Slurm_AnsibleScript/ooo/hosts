@@ -1,0 +1,11 @@
+[slurm_controller]
+192.168.100.2 ansible_user=root ansible_password=1234 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+192.168.100.5 ansible_user=root ansible_password=1234 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+
+[slurm_compute]
+192.168.100.3 ansible_user=root ansible_password=1234 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+192.168.100.4 ansible_user=root ansible_password=1234 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+192.168.100.6 ansible_user=root ansible_password=1234 ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+
+[slurm_login]
+192.168.100.1 ansible_connection=local

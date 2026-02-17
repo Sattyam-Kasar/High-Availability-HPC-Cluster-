@@ -1,0 +1,45 @@
+ClusterName={{ cluster_name }}
+SlurmctldHost=controller
+AuthType=auth/munge
+SlurmUser=root
+AccountingStorageType=accounting_storage/slurmdbd
+MpiDefault=none
+ProctrackType=proctrack/cgroup
+ReturnToService=1
+SlurmctldPidFile=/var/run/slurmctld.pid
+SlurmctldPort=6817
+SlurmdPidFile=/var/run/slurmd.pid
+SlurmdPort=6818
+SlurmdSpoolDir=/var/spool/slurmd
+StateSaveLocation=/var/spool/slurmctld
+SwitchType=switch/none
+TaskPlugin=task/affinity
+InactiveLimit=0
+KillWait=30
+MinJobAge=300
+SlurmctldTimeout=120
+SlurmdTimeout=300
+Waittime=0
+SchedulerType=sched/backfill
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core
+JobCompType=jobcomp/none
+JobAcctGatherFrequency=30
+JobAcctGatherType=jobacct_gather/none
+SlurmctldDebug=info
+SlurmctldLogFile=/var/log/slurmctld.log
+SlurmdDebug=info
+SlurmdLogFile=/var/log/slurmd.log
+
+# Node Names (Generated from inventory)
+NodeName=controller CPUs=1 State=UNKNOWN
+
+# Compute Nodes (Names: node01, node02...)
+{% for host in groups['slurm_compute'] %}
+NodeName=node{{ loop.index }} CPUs=1 State=UNKNOWN
+{% endfor %}
+
+PartitionName={{ partition_name }} Nodes=ALL Default=YES MaxTime=INFINITE State=UP
+
+# PDF Specifics
+MailProg=/usr/bin/mail

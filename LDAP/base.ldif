@@ -1,0 +1,7 @@
+dn: ou=people,dc=HPCCluster,dc=com
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=HPCCluster,dc=com
+objectClass: organizationalUnit
+ou: groups

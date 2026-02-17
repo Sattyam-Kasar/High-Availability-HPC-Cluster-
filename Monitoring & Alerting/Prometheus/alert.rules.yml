@@ -1,0 +1,140 @@
+groups:
+  - name: cluster_health
+    rules:
+      - alert: NodeDown
+        expr: up{job="node-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node {{ $labels.instance }} is down"
+          description: "Node has been unreachable for more than 2 minutes."
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% for 5 minutes."
+
+  - name: system_health_alerts
+    rules:
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low Disk Space on {{ $labels.instance }}"
+          description: "Disk space is below 10% on the root partition."
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High Memory Usage on {{ $labels.instance }}"
+
+      - alert: NodeRecentlyRebooted
+        expr: time() - node_boot_time_seconds < 600
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: "Node {{ $labels.instance }} just rebooted."
+
+  - name: advanced_cluster_monitoring
+    rules:
+      # 1. Predict if Disk will be full in 24 hours based on current usage
+      - alert: DiskWillBeFullIn24Hours
+        expr: predict_linear(node_filesystem_free_bytes{mountpoint="/"}[1h], 24 * 3600) < 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk predicted to be full in 24h on {{ $labels.instance }}"
+
+      # 2. High Disk IO (I/O Wait) - Indicates slow disks or heavy swap usage
+      - alert: HighIOWait
+        expr: avg by (instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) * 100 > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High I/O Wait on {{ $labels.instance }}"
+          description: "Disk I/O is causing CPU bottlenecks."
+
+      # 3. Network Saturation (Receive)
+      - alert: NetworkReceiveSaturation
+        expr: rate(node_network_receive_bytes_total{device!~"lo"}[5m]) > 100000000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Network Traffic (Inbound) on {{ $labels.instance }}"
+
+      # 4. Prometheus Target Scrape Failures
+      - alert: PrometheusTargetMissing
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus target missing: {{ $labels.instance }}"
+
+  - name: slurm_alerts
+    rules:
+      # 1. Alert if Slurmctld (Controller) is down
+      - alert: SlurmControllerDown
+        expr: up{job="slurm-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CRITICAL: Slurm Controller Down"
+          description: "The Slurm exporter is not reporting, or the slurmctld service has stopped on {{ $labels.instance }}."
+
+      # 2. Alert if a Compute Node is in 'DOWN' state
+      - alert: SlurmNodeDown
+        expr: slurm_node_state{state="down"} > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Slurm Node Down: {{ $labels.node }}"
+          description: "Node {{ $labels.node }} is in a DOWN state in the Slurm cluster."
+
+      # 3. Alert if jobs are stuck in PENDING for too long
+      - alert: SlurmJobsPending
+        expr: sum(slurm_job_count{state="pending"}) > 50
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of pending Slurm jobs"
+          description: "There are more than 50 jobs pending for over 30 minutes."
+
+  - name: slurm_efficiency_alerts
+    rules:
+      # 1. Slurm Partition Drained (Nodes manually or automatically pulled from pool)
+      - alert: SlurmPartitionDrained
+        expr: slurm_node_state{state="drained"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slurm Nodes Drained"
+          description: "{{ $value }} nodes are currently in DRAIN state and cannot accept jobs."
+
+      # 2. Critical Job Failure Rate
+      - alert: SlurmHighJobFailureRate
+        expr: rate(slurm_job_count{state="failed"}[15m]) > 5
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High Slurm Job Failure Rate"
+          description: "More than 5 jobs are failing per minute. Check for script errors or mounting issues."

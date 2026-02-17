@@ -1,0 +1,21 @@
+options {
+        directory "/var/cache/bind";
+
+        recursion yes;
+        
+        # We merged your two allow-query lines into this one:
+        allow-query { 127.0.0.1; 192.168.100.0/24; };
+
+        # Only one listen-on port 53 line is allowed:
+        listen-on port 53 { 127.0.0.1; 192.168.100.1; };
+
+        # Forward internet requests to classroom DNS and Google
+        forwarders {
+                192.168.72.20;
+                8.8.8.8;
+        };
+
+        dnssec-validation auto;
+
+        listen-on-v6 { any; };
+};

@@ -1,0 +1,16 @@
+dn: uid=satyam,ou=People,dc=HPCCluster,dc=com
+objectClass: top
+objectClass: account
+objectClass: posixAccount
+objectClass: shadowAccount
+cn: satyam
+uid: satyam
+uidNumber: 5002
+gidNumber: 5000
+homeDirectory: /home/satyam
+loginShell: /bin/bash
+gecos: Satyam User
+userPassword: {crypt}x
+shadowLastChange: 0
+shadowMax: 99999
+shadowWarning: 7

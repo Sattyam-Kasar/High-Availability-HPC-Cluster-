@@ -1,0 +1,4 @@
+dn: cn=hpcusers,ou=groups,dc=HPCCluster,dc=com
+objectClass: posixGroup
+cn: hpcusers
+gidNumber: 5000

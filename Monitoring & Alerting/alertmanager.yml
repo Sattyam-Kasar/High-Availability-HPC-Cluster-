@@ -1,0 +1,32 @@
+global:
+  resolve_timeout: 1m
+
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 1h
+  receiver: 'telegram-notifications'
+
+receivers:
+- name: 'telegram-notifications'
+  telegram_configs:
+  - bot_token: '8566321314:AAEldRPM0QzaMuilfAGPXWkW4pV45GP31z4' # Your Bot Token from BotFather
+    chat_id: 1982712724                         # Your Chat ID from userinfobot
+    send_resolved: true                        # This sends the "Resolved" notification
+    parse_mode: 'HTML'
+    message: |
+      {{ if eq .Status "firing" }}🔥 <b>FIRING</b>{{ else }}✅ <b>RESOLVED</b>{{ end }}
+      <b>Alert:</b> {{ .CommonLabels.alertname }}
+      <b>Instance:</b> <code>{{ .CommonLabels.instance }}</code>
+      <b>Severity:</b> {{ .CommonLabels.severity }}
+      
+      {{ range .Alerts }}
+      📌 {{ .Annotations.summary }}
+      ⏰ Started: {{ .StartsAt.Local.Format "15:04:05" }}
+      {{ if eq .Status "resolved" }}
+      🏁 Ended: {{ .EndsAt.Local.Format "15:04:05" }}
+      ⌛ <b>Duration:</b> {{ ( .EndsAt.Sub .StartsAt ).Truncate 1000000000 }}
+      ✅ <b>ISSUE RESOLVED</b>
+      {{ end }}
+      {{ end }}

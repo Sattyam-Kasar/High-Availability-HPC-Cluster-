@@ -1,0 +1,13 @@
+dn: uid=yogesh,ou=people,dc=HPCCluster,dc=com
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: yogesh
+sn: Yogesh
+givenName: Yogesh
+cn: Yogesh
+uidNumber: 5001
+gidNumber: 5000
+userPassword: {CRYPT}x
+loginShell: /bin/bash
+homeDirectory: /home/yogesh
